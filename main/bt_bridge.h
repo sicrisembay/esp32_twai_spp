@@ -4,10 +4,12 @@
 #include "freertos/ringbuf.h"
 
 typedef void (* bt_bridge_srv_open_cb_t)(void);
+typedef void (* bt_bridge_srv_close_cb_t)(void);
 typedef void (* bt_bridge_write_done_cb_t)(bool bCongest);
 
 extern void bt_bridge_init(void);
 extern void bt_bridge_register_srv_open_cb(bt_bridge_srv_open_cb_t callback);
+extern void bt_bridge_register_srv_close_cb(bt_bridge_srv_close_cb_t callback);
 extern void bt_bridge_register_write_done_cb(bt_bridge_write_done_cb_t callback);
 extern RingbufHandle_t bt_bridge_get_rx_hdl(void);
 extern char * bt_bridge_get_name(void);

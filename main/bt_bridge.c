@@ -14,6 +14,7 @@
 #include "esp_spp_api.h"
 #include "bt_bridge.h"
 #include "freertos/ringbuf.h"
+#include "frame_parser.h"
 
 #include "time.h"
 #include "sys/time.h"
@@ -31,6 +32,7 @@ static bool bCongest = false;
 static bool bBtWriteDone = true;
 static bool bInit = false;
 static bt_bridge_srv_open_cb_t srv_open_cb = NULL;
+static bt_bridge_srv_close_cb_t srv_close_cb = NULL;
 static bt_bridge_write_done_cb_t write_done_cb = NULL;
 static char btDevName[33];
 
@@ -59,6 +61,9 @@ static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
         ESP_LOGI(TAG, "ESP_SPP_CLOSE_EVT");
         ESP_LOGI(TAG, "Client Handle=%d", param->close.handle);
         bt_initiator_hdl = 0;
+        if(srv_close_cb != NULL) {
+            srv_close_cb();
+        }
         break;
     case ESP_SPP_START_EVT:
         ESP_LOGI(TAG, "ESP_SPP_START_EVT");
@@ -82,6 +87,9 @@ static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
         bCongest = param->cong.cong;
         break;
     case ESP_SPP_WRITE_EVT:
+#if 0
+        ESP_LOGI(TAG, "ESP_SPP_WRITE_EVT");
+#endif
         bBtWriteDone = true;
         if(write_done_cb != NULL) {
             write_done_cb(bCongest);
@@ -97,8 +105,30 @@ static void esp_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t *param)
         break;
     }
     default:
+        ESP_LOGI(TAG, "spp event: %d", event);
         break;
     }
+}
+
+static void bt_bridge_task(void * arg)
+{
+    uint32_t blockLen;
+    uint8_t txBuf[256];
+
+    while(1) {
+        blockLen = 256;
+        if(!bt_bridge_rdy() || bt_bride_is_congested()) {
+            vTaskDelay(1);
+        } else {
+            spp_tx_get_block(txBuf, &blockLen);
+            if(blockLen != 0) {
+                bt_bridge_send(txBuf, blockLen);
+            } else {
+                vTaskDelay(1);
+            }
+        }
+    }
+    vTaskDelete(NULL);
 }
 
 void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
@@ -131,7 +161,7 @@ void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
         break;
     }
     default: {
-        ESP_LOGI(TAG, "event: %d", event);
+        ESP_LOGI(TAG, "gap event: %d", event);
         break;
     }
     }
@@ -145,6 +175,9 @@ void bt_bridge_init(void)
     esp_err_t ret;
 
     if(bInit != true) {
+        /* Task */
+        xTaskCreatePinnedToCore(bt_bridge_task, "BT_bridge", 4096, NULL, 7, NULL, tskNO_AFFINITY);
+
         /* BT receive buffer */
         bridgeRxBuf_handle = xRingbufferCreate(CONFIG_BT_BRIDGE_RX_BUFSZ, RINGBUF_TYPE_BYTEBUF);
         if(bridgeRxBuf_handle == NULL) {
@@ -216,6 +249,11 @@ void bt_bridge_init(void)
 void bt_bridge_register_srv_open_cb(bt_bridge_srv_open_cb_t callback)
 {
     srv_open_cb = callback;
+}
+
+void bt_bridge_register_srv_close_cb(bt_bridge_srv_close_cb_t callback)
+{
+    srv_close_cb = callback;
 }
 
 void bt_bridge_register_write_done_cb(bt_bridge_write_done_cb_t callback)
