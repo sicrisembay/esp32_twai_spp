@@ -1,6 +1,5 @@
-set(srcs    "twai_spp_main.c"
-            "bt_bridge.c"
-            "frame_parser.c")
+set(srcs    "main.c"
+            "wifi_network.c")
 
 set(include_dirs ".")
 
