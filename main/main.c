@@ -10,6 +10,12 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "wifi_network.h"
+#include "tcp_server.h"
+#include "can.h"
+#include "data.h"
+
+static QueueHandle_t tcpTxQueue;
+static QueueHandle_t tcpRxQueue;
 
 void app_main(void)
 {
@@ -20,5 +26,10 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    tcpTxQueue = xQueueCreate(100, sizeof(dev_buffer_t));
+    tcpRxQueue = xQueueCreate(100, sizeof(dev_buffer_t));
+
     wifi_init_softap();
+    tcp_server_init(3333, &tcpTxQueue, &tcpRxQueue);
+    can_init(&tcpTxQueue);
 }

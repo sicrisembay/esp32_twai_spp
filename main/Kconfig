@@ -10,4 +10,8 @@ menu "BT SPP - TWAI"
     config TWAI_BRIDGE_RX_GPIO_NUM
         int "TWAI Rx Pin"
         default 22
+
+    config TWAI_RX_TASK_PRIORITY
+        int "Twai Rx Task Priority"
+        default 8
 endmenu

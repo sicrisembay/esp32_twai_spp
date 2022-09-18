@@ -1,5 +1,7 @@
 set(srcs    "main.c"
-            "wifi_network.c")
+            "wifi_network.c"
+            "can.c"
+            "tcp_server.c")
 
 set(include_dirs ".")
 
