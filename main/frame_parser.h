@@ -47,13 +47,15 @@
 #define CMD_SEND_DOWNSTREAM     (0x10)  /* Send down to TWAI */
 #define CMD_SEND_UPSTREAM       (0x11)  /* Send up to BT SPP */
 
-void parser_init();
+typedef void (*pfn_valid_frame_cb)(uint8_t * pFrame, uint32_t len);
+
+void parser_init(pfn_valid_frame_cb cb);
 esp_err_t spp_tx_get_block(uint8_t * pBlock, uint32_t * pSize);
 esp_err_t spp_send(uint8_t * pBuf, uint32_t len);
 int format_frame(uint8_t * dstBuf, size_t dstBufSz, uint8_t * payload, uint32_t payloadLen);
 void parse_frame(dev_buffer_t * pbuf);
 //esp_err_t spp_get_block(uint8_t * pBuf, uint32_t *pLen);
-void spp_parser_store(uint8_t * pBuf, uint32_t len);
+void parser_store(uint8_t * pBuf, uint32_t len);
 void spp_parser_process();
 
 #endif /* _FRAME_PARSER_H_ */

@@ -58,11 +58,71 @@ static void canRxHandler(void * pvParameters)
 }
 
 
+static void valid_frame_cb(uint8_t * pFrame, uint32_t len)
+{
+    switch(pFrame[0]) {
+        case CMD_SEND_DOWNSTREAM: {
+            can_buffer_t cantx;
+            memset((void*)&cantx, 0, sizeof(cantx));
+            cantx.identifier = pFrame[1] + 
+                        ((uint32_t)pFrame[2] << 8) +
+                        ((uint32_t)pFrame[3] << 16) +
+                        ((uint32_t)pFrame[4] << 24);
+            cantx.dlc = pFrame[5];
+            if(cantx.dlc > CAN_STANDARD_BUFFER_LENGTH) {
+                return;
+            }
+            if(cantx.dlc > 0) {
+                for(int i = 0; i < cantx.dlc; i++) {
+                    cantx.data[i] = pFrame[6 + i];
+                }
+            }
+            /* Send downstream */
+            if(pdPASS != xQueueSend(canTxQueue, (void*) &cantx, pdMS_TO_TICKS(100))) {
+                ESP_LOGI(TAG, "canTx Queue full!");
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+#if 0
+    if(pBuf->len >= (1 + FRAME_RX_OVERHEAD)) {
+        switch(pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET]) {
+            case CMD_SEND_DOWNSTREAM: {
+                twai_message_t downstream_msg;
+                esp_err_t retval = ESP_OK;
+                downstream_msg.flags = 0;
+                downstream_msg.identifier = pBuf->u8Element[FRAME_RX_PAYLOAD_PARAM_OFFSET];
+                downstream_msg.identifier |= (((uint16_t)(pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 1)])) << 8);
+                downstream_msg.data_length_code = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 2)];
+                for(int i = 0; i < downstream_msg.data_length_code; i++) {
+                    downstream_msg.data[i] = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 3 + i)];
+                }
+                retval = twai_transmit(&downstream_msg, pdMS_TO_TICKS(2000));
+                if(ESP_OK != retval) {
+                    ESP_LOGI(TAG, "Failed twai_transmit 0x%X", retval);
+                }
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+#endif
+}
+
+
 static void tcpRxHandler(void * pvParameters)
 {
     static dev_buffer_t rxTcp;
+    parser_init(valid_frame_cb);
+
     while(1) {
         xQueueReceive(tcpRxQueue, (void *)&rxTcp, portMAX_DELAY);
+        parse_frame(&rxTcp);
     }
 }
 

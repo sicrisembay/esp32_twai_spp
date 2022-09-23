@@ -28,7 +28,9 @@ static uint8_t sppTxFrameBuffer[FRAME_TX_SIZE];
 static SemaphoreHandle_t xMutexSppTxBuffer;
 static uint16_t sppTxSeq = 0;
 
-static const char * TAG = "frame_parser";
+static pfn_valid_frame_cb validFrameCb = NULL;
+
+#define TAG __func__
 
 #if 0
 /*
@@ -86,9 +88,10 @@ static void process_valid_spp_rx_frame(const uint32_t index, uint8_t len)
 
 #endif
 
-#if 0
-void parser_init()
+#if 1
+void parser_init(pfn_valid_frame_cb cb)
 {
+#if 0
     sppRxRdPtr = 0;
     sppRxWrPtr = 0;
     memset(sppRxFrameBuffer, 0, FRAME_RX_SIZE);
@@ -105,8 +108,12 @@ void parser_init()
         /* Failed to create mutex */
         ESP_ERROR_CHECK(ESP_FAIL);
     }
+#endif
+    validFrameCb = cb;
 }
+#endif
 
+#if 0
 esp_err_t spp_tx_get_block(uint8_t * pBlock, uint32_t * pSize)
 {
     if ((pBlock == NULL) || (pSize == NULL)) {
@@ -274,7 +281,7 @@ esp_err_t spp_send(uint8_t * pBuf, uint32_t len)
 #endif
 
 #if 0
-void spp_parser_store(uint8_t * pBuf, uint32_t len)
+void parser_store(uint8_t * pBuf, uint32_t len)
 {
     if((pBuf != NULL) && (len > 0)) {
         for(uint32_t i = 0; i < len; i++) {
@@ -288,10 +295,8 @@ void spp_parser_store(uint8_t * pBuf, uint32_t len)
 }
 #endif
 
-
 void parse_frame(dev_buffer_t * pBuf)
 {
-    int frameLen = 0;
     uint8_t checksum = 0;
 
     if(NULL == pBuf) {
@@ -314,28 +319,9 @@ void parse_frame(dev_buffer_t * pBuf)
         return;
     }
 
-    if(pBuf->len >= (1 + FRAME_RX_OVERHEAD)) {
-        switch(pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET]) {
-            case CMD_SEND_DOWNSTREAM: {
-                twai_message_t downstream_msg;
-                esp_err_t retval = ESP_OK;
-                downstream_msg.flags = 0;
-                downstream_msg.identifier = pBuf->u8Element[FRAME_RX_PAYLOAD_PARAM_OFFSET];
-                downstream_msg.identifier |= (((uint16_t)(pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 1)])) << 8);
-                downstream_msg.data_length_code = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 2)];
-                for(int i = 0; i < downstream_msg.data_length_code; i++) {
-                    downstream_msg.data[i] = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 3 + i)];
-                }
-                retval = twai_transmit(&downstream_msg, pdMS_TO_TICKS(2000));
-                if(ESP_OK != retval) {
-                    ESP_LOGI(TAG, "Failed twai_transmit 0x%X", retval);
-                }
-                break;
-            }
-            default: {
-                break;
-            }
-        }
+    /* Valid Frame */
+    if(validFrameCb != NULL) {
+        validFrameCb(&pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET], pBuf->len - FRAME_RX_OVERHEAD);
     }
 }
 
