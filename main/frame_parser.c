@@ -5,6 +5,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "driver/twai.h"
+#include "data.h"
 #include "frame_parser.h"
 
 #define ENABLE_BREADCRUMB_DEBUG (0)
@@ -29,6 +30,7 @@ static uint16_t sppTxSeq = 0;
 
 static const char * TAG = "frame_parser";
 
+#if 0
 /*
  * Process valid frame (Device <-- PC)
  */
@@ -82,7 +84,9 @@ static void process_valid_spp_rx_frame(const uint32_t index, uint8_t len)
     }
 }
 
+#endif
 
+#if 0
 void parser_init()
 {
     sppRxRdPtr = 0;
@@ -132,8 +136,59 @@ esp_err_t spp_tx_get_block(uint8_t * pBlock, uint32_t * pSize)
 
     return ESP_OK;
 }
+#endif
 
+int format_frame(uint8_t * dstBuf, size_t dstBufSz, uint8_t * payload, uint32_t payloadLen)
+{
+    uint16_t frameLen = 0;
+    uint32_t timestamp = 0;
+    uint8_t checksum = 0;
+    int idx = 0;
 
+    if ((NULL == dstBuf) || (NULL == payload) || (payloadLen == 0)) {
+        return -1;
+    }
+
+    frameLen = payloadLen + FRAME_TX_OVERHEAD;
+    if((frameLen > 255) || (frameLen > dstBufSz)) {
+        ESP_LOGW(TAG, "payload too big to fit!");
+        return -1;
+    }
+
+    /* SOF */
+    dstBuf[idx++] = TAG_SOF;
+    checksum = TAG_SOF;
+    /* LEN */
+    dstBuf[idx++] = frameLen;
+    checksum += frameLen;
+    /* Timestamp */
+    timestamp = xTaskGetTickCount();
+    dstBuf[idx] = timestamp & 0x000000FF;
+    checksum += dstBuf[idx++];
+    dstBuf[idx] = (timestamp >> 8) & 0x000000FF;
+    checksum += dstBuf[idx++];
+    dstBuf[idx] = (timestamp >> 16) & 0x000000FF;
+    checksum += dstBuf[idx++];
+    dstBuf[idx] = (timestamp >> 24) & 0x000000FF;
+    checksum += dstBuf[idx++];
+    /* Packet SEQ */
+    dstBuf[idx] = sppTxSeq & 0x00FF;
+    checksum += dstBuf[idx++];
+    dstBuf[idx] = (sppTxSeq >> 8) & 0x00FF;
+    checksum += dstBuf[idx++];
+    sppTxSeq++;
+    /* Payload */
+    for (uint32_t i = 0; i < payloadLen; i++) {
+        dstBuf[idx] = payload[i];
+        checksum += dstBuf[idx++];
+    }
+    /* Checksum */
+    dstBuf[idx++] = -checksum;
+
+    return(idx);
+}
+
+#if 0
 esp_err_t spp_send(uint8_t * pBuf, uint32_t len)
 {
     uint16_t frameLen = 0;
@@ -216,8 +271,9 @@ esp_err_t spp_send(uint8_t * pBuf, uint32_t len)
 
     return ESP_OK;
 }
+#endif
 
-
+#if 0
 void spp_parser_store(uint8_t * pBuf, uint32_t len)
 {
     if((pBuf != NULL) && (len > 0)) {
@@ -230,6 +286,61 @@ void spp_parser_store(uint8_t * pBuf, uint32_t len)
 #endif
     }
 }
+#endif
+
+
+void parse_frame(dev_buffer_t * pBuf)
+{
+    int frameLen = 0;
+    uint8_t checksum = 0;
+
+    if(NULL == pBuf) {
+        return;
+    }
+
+    if(pBuf->len < FRAME_RX_OVERHEAD) {
+        return;
+    }
+
+    if(TAG_SOF != pBuf->u8Element[0]) {
+        return;
+    }
+
+    for(int i = 0; i < pBuf->len; i++) {
+        checksum += pBuf->u8Element[i];
+    }
+
+    if(0 != checksum) {
+        return;
+    }
+
+    if(pBuf->len >= (1 + FRAME_RX_OVERHEAD)) {
+        switch(pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET]) {
+            case CMD_SEND_DOWNSTREAM: {
+                twai_message_t downstream_msg;
+                esp_err_t retval = ESP_OK;
+                downstream_msg.flags = 0;
+                downstream_msg.identifier = pBuf->u8Element[FRAME_RX_PAYLOAD_PARAM_OFFSET];
+                downstream_msg.identifier |= (((uint16_t)(pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 1)])) << 8);
+                downstream_msg.data_length_code = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 2)];
+                for(int i = 0; i < downstream_msg.data_length_code; i++) {
+                    downstream_msg.data[i] = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 3 + i)];
+                }
+                retval = twai_transmit(&downstream_msg, pdMS_TO_TICKS(2000));
+                if(ESP_OK != retval) {
+                    ESP_LOGI(TAG, "Failed twai_transmit 0x%X", retval);
+                }
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+}
+
+
+#if 0
 
 /*
  * Parse Frame (Device <-- PC)
@@ -313,3 +424,4 @@ void spp_parser_process()
         sppRxRdPtr = (sppRxRdPtr + length) & FRAME_RX_SZ_MASK;
     }
 }
+#endif
