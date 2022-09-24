@@ -54,8 +54,8 @@ static void twai_transmit_task(void *arg)
     while(1) {
         xQueueReceive(*canTxQ, (void *)&canTx, portMAX_DELAY);
 
-        if((canTx.dlc < 0) || 
-           (canTx.dlc > 8)) {
+        if(canTx.dlc > CAN_STANDARD_BUFFER_LENGTH) {
+            /* Standard CAN has max 8 bytes */
             continue;
         }
 

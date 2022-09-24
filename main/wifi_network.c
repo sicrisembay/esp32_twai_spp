@@ -50,18 +50,16 @@ void wifi_init_softap(void)
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = "MySSID",
+            .ssid = CONFIG_WIFI_AP_NAME,
             .ssid_len = 6,
             .channel = 1,
-            .password = "password",
+            .password = CONFIG_WIFI_AP_PASSORD,
             .max_connection = 4,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
 
-//    if(strlen(wifi_config.ap.password) == 0) {
-//        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-//    }
+    wifi_config.ap.ssid_len = strlen((char *)wifi_config.ap.ssid);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));

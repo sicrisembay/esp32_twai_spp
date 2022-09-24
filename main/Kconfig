@@ -1,14 +1,16 @@
 menu "BT SPP - TWAI"
-    config BT_BRIDGE_RX_BUFSZ
-        int "BT Rx Buffer Size"
-        default 4096
-
+    config WIFI_AP_NAME
+        string "AP"
+        default "H255182_CAN_ISO"
+    config WIFI_AP_PASSORD
+        string "password"
+        default "password"
     config TWAI_BRIDGE_TX_GPIO_NUM
-        int "TWAI Tx Pin"
+        int "CAN Tx Pin"
         default 23
 
     config TWAI_BRIDGE_RX_GPIO_NUM
-        int "TWAI Rx Pin"
+        int "CAN Rx Pin"
         default 22
 
     config TWAI_RX_TASK_PRIORITY
