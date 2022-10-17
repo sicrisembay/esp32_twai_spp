@@ -148,5 +148,22 @@ void app_main(void)
     xTaskCreate(tcpRxHandler, "tcp_rx_handler", 4096, NULL, 5, &taskHandle_tcpRx);
     xTaskCreate(canRxHandler, "can_rx_handler", 4096, NULL, 5, &taskHandle_tcpRx);
 
+#if (CONFIG_LED_GPIO_PIN >= 0)
+    gpio_config_t led_conf;
+    led_conf.intr_type = GPIO_INTR_DISABLE;
+    led_conf.mode = GPIO_MODE_OUTPUT;
+    led_conf.pin_bit_mask = (1ULL << CONFIG_LED_GPIO_PIN);
+    led_conf.pull_down_en = 0;
+    led_conf.pull_up_en = 1;
+    gpio_config(&led_conf);
+
+    while(1) {
+        gpio_set_level(CONFIG_LED_GPIO_PIN, 0);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        gpio_set_level(CONFIG_LED_GPIO_PIN, 1);
+        vTaskDelay(pdMS_TO_TICKS(4950));
+    }
+#endif /* (CONFIG_LED_GPIO_PIN >= 0) */
+
     ESP_LOGI(TAG, "Goodbye");
 }

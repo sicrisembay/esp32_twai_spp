@@ -2,9 +2,11 @@ menu "BT SPP - TWAI"
     config WIFI_AP_NAME
         string "AP"
         default "H255182_CAN_ISO"
+
     config WIFI_AP_PASSORD
         string "password"
         default "password"
+
     config TWAI_BRIDGE_TX_GPIO_NUM
         int "CAN Tx Pin"
         default 23
@@ -16,4 +18,8 @@ menu "BT SPP - TWAI"
     config TWAI_RX_TASK_PRIORITY
         int "Twai Rx Task Priority"
         default 8
+
+    config LED_GPIO_PIN
+        int "LED GPIO"
+        default 0
 endmenu
