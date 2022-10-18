@@ -18,6 +18,18 @@
 
 #define TAG __func__
 
+#define MAX_SLOT_CAN_PERIODIC      (4)
+#define MINIMUM_PERIOD_MS          (20)
+
+typedef struct {
+    bool bEnable;
+    uint16_t period_ms;
+    uint16_t counter;
+    can_buffer_t msg;
+} can_buffer_periodic_slot_t;
+
+static can_buffer_periodic_slot_t can_buffer_periodic[MAX_SLOT_CAN_PERIODIC];
+
 static QueueHandle_t tcpTxQueue;
 static QueueHandle_t tcpRxQueue;
 static QueueHandle_t canRxQueue;
@@ -25,6 +37,42 @@ static QueueHandle_t canTxQueue;
 static dev_buffer_t devTcpRx;
 static TaskHandle_t taskHandle_canRx = NULL;
 static TaskHandle_t taskHandle_tcpRx = NULL;
+static TaskHandle_t taskHandle_canPeriodicTx = NULL;
+static SemaphoreHandle_t canPeriodicMutex = NULL;
+
+static void canPeriodicTx(void * pvParameters)
+{
+    uint8_t slotIdx = 0;
+    TickType_t xLastWakeTime;
+    memset(can_buffer_periodic, 0, sizeof(can_buffer_periodic));
+
+    xLastWakeTime = xTaskGetTickCount();
+
+    while(1) {
+        xTaskDelayUntil(&xLastWakeTime, 1);
+        if(xSemaphoreTake(canPeriodicMutex, 20) == pdTRUE) {
+            for(slotIdx = 0; slotIdx < MAX_SLOT_CAN_PERIODIC; slotIdx++) {
+                if(can_buffer_periodic[slotIdx].bEnable) {
+                    can_buffer_periodic[slotIdx].counter++;
+                    if(can_buffer_periodic[slotIdx].counter >= can_buffer_periodic[slotIdx].period_ms) {
+                        /* Send to TWAI */
+                        if(pdPASS != xQueueSend(
+                                        canTxQueue,
+                                        (void*) &(can_buffer_periodic[slotIdx].msg),
+                                         2)) {
+                            ESP_LOGI(TAG, "canPeriodicTx: canTx Queue full!");
+                        }
+                        can_buffer_periodic[slotIdx].counter = 0;
+                    }
+                }
+            }
+            xSemaphoreGive(canPeriodicMutex);
+        } else {
+            ESP_LOGW(TAG, "canPeriodicTx failed to get mutex!");
+        }
+    }
+}
+
 
 static void canRxHandler(void * pvParameters)
 {
@@ -62,6 +110,7 @@ static void valid_frame_cb(uint8_t * pFrame, uint32_t len)
 {
     switch(pFrame[0]) {
         case CMD_SEND_DOWNSTREAM: {
+            ESP_LOGI(TAG, "Received: CMD_SEND_DOWNSTREAM frame");
             can_buffer_t cantx;
             memset((void*)&cantx, 0, sizeof(cantx));
             cantx.identifier = pFrame[1] + 
@@ -83,35 +132,38 @@ static void valid_frame_cb(uint8_t * pFrame, uint32_t len)
             }
             break;
         }
+        case CMD_SEND_DOWNSTREAM_PERIODIC: {
+            ESP_LOGI(TAG, "Received: CMD_SEND_DOWNSTREAM_PERIODIC frame");
+            uint8_t slot = pFrame[1];
+            if(slot < MAX_SLOT_CAN_PERIODIC) {
+                if(xSemaphoreTake(canPeriodicMutex, 100) == pdTRUE) {
+                    uint16_t period = (uint16_t)pFrame[3] +
+                                   (((uint16_t)pFrame[4]) << 8);
+                    uint32_t can_id = pFrame[5] +
+                                    ((uint32_t)pFrame[6] << 8) +
+                                    ((uint32_t)pFrame[7] << 16) +
+                                    ((uint32_t)pFrame[8] << 24);
+                    can_buffer_periodic[slot].bEnable = pFrame[2];
+                    can_buffer_periodic[slot].counter = 0;
+                    can_buffer_periodic[slot].period_ms = period;
+                    can_buffer_periodic[slot].msg.identifier = can_id;
+                    can_buffer_periodic[slot].msg.dlc = pFrame[9];
+                    if(can_buffer_periodic[slot].msg.dlc > 0) {
+                        for(int i = 0; i < can_buffer_periodic[slot].msg.dlc; i++) {
+                            can_buffer_periodic[slot].msg.data[i] = pFrame[10 + i];
+                        }
+                    }
+                    xSemaphoreGive(canPeriodicMutex);
+                } else {
+                    ESP_LOGW(TAG, "valid_frame_cb: failed to take mutex!");
+                }
+            }
+            break;
+        }
         default: {
             break;
         }
     }
-#if 0
-    if(pBuf->len >= (1 + FRAME_RX_OVERHEAD)) {
-        switch(pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET]) {
-            case CMD_SEND_DOWNSTREAM: {
-                twai_message_t downstream_msg;
-                esp_err_t retval = ESP_OK;
-                downstream_msg.flags = 0;
-                downstream_msg.identifier = pBuf->u8Element[FRAME_RX_PAYLOAD_PARAM_OFFSET];
-                downstream_msg.identifier |= (((uint16_t)(pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 1)])) << 8);
-                downstream_msg.data_length_code = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 2)];
-                for(int i = 0; i < downstream_msg.data_length_code; i++) {
-                    downstream_msg.data[i] = pBuf->u8Element[(FRAME_RX_PAYLOAD_PARAM_OFFSET + 3 + i)];
-                }
-                retval = twai_transmit(&downstream_msg, pdMS_TO_TICKS(2000));
-                if(ESP_OK != retval) {
-                    ESP_LOGI(TAG, "Failed twai_transmit 0x%X", retval);
-                }
-                break;
-            }
-            default: {
-                break;
-            }
-        }
-    }
-#endif
 }
 
 
@@ -147,6 +199,9 @@ void app_main(void)
 
     xTaskCreate(tcpRxHandler, "tcp_rx_handler", 4096, NULL, 5, &taskHandle_tcpRx);
     xTaskCreate(canRxHandler, "can_rx_handler", 4096, NULL, 5, &taskHandle_tcpRx);
+
+    canPeriodicMutex = xSemaphoreCreateMutex();
+    xTaskCreate(canPeriodicTx, "can_tx_periodic", 4096, NULL, 5, &taskHandle_canPeriodicTx);
 
 #if (CONFIG_LED_GPIO_PIN >= 0)
     gpio_config_t led_conf;

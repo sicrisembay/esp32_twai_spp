@@ -84,6 +84,8 @@ int format_frame(uint8_t * dstBuf, size_t dstBufSz, uint8_t * payload, uint32_t 
 void parse_frame(dev_buffer_t * pBuf)
 {
     uint8_t checksum = 0;
+    uint32_t rdPtr = 0;
+    uint8_t len = 0;
 
     if(NULL == pBuf) {
         return;
@@ -93,20 +95,27 @@ void parse_frame(dev_buffer_t * pBuf)
         return;
     }
 
-    if(TAG_SOF != pBuf->u8Element[0]) {
-        return;
-    }
+    while(rdPtr < pBuf->len) {
+        /* Check for start TAG */
+        if(TAG_SOF != pBuf->u8Element[rdPtr]) {
+            rdPtr++;
+            continue;
+        }
+        len = pBuf->u8Element[rdPtr + LEN_OFFSET];
+        checksum = 0;
+        for(int i = 0; i < len; i++) {
+            checksum += pBuf->u8Element[rdPtr + i];
+        }
 
-    for(int i = 0; i < pBuf->len; i++) {
-        checksum += pBuf->u8Element[i];
-    }
-
-    if(0 != checksum) {
-        return;
-    }
-
-    /* Valid Frame */
-    if(validFrameCb != NULL) {
-        validFrameCb(&pBuf->u8Element[FRAME_RX_PAYLOAD_CMD_OFFSET], pBuf->len - FRAME_RX_OVERHEAD);
+        if(0 != checksum) {
+            rdPtr++;
+            continue;
+        } else {
+            /* Valid Frame */
+            if(validFrameCb != NULL) {
+                validFrameCb(&pBuf->u8Element[rdPtr + FRAME_RX_PAYLOAD_CMD_OFFSET], len - FRAME_RX_OVERHEAD);
+            }
+            rdPtr += len;
+        }
     }
 }

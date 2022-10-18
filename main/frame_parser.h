@@ -44,8 +44,28 @@
 #define CMD_DISABLE_TWAI        (0x03)
 #define CMD_GET_DEVICE_NAME     (0x04)
 
-#define CMD_SEND_DOWNSTREAM     (0x10)  /* Send down to TWAI */
-#define CMD_SEND_UPSTREAM       (0x11)  /* Send up to BT SPP */
+/*
+ * CMD_SEND_DOWNSTREAM
+ *     frame[0]     : CMD_SEND_DOWNSTREAM
+ *     frame[1:4]   : CAN ID (little-endian)
+ *     frame[5]     : CAN DLC
+ *     frame[6+DLC] : CAN Payload
+ */
+#define CMD_SEND_DOWNSTREAM             (0x10)  /* Send down to TWAI */
+
+#define CMD_SEND_UPSTREAM               (0x11)  /* Send up to BT SPP */
+
+/*
+ * CMD_SEND_DOWNSTREAM_PERIODIC
+ *     frame[0]     : CMD_SEND_DOWNSTREAM_PERIODIC
+ *     frame[1]     : Slot Number
+ *     frame[2]     : Sub-command (0: Disable, 1: Enable)
+ *     frame[3:4]   : Period in millisecond (little-endian)
+ *     frame[5:8]   : CAN ID (little-endian)
+ *     frame[9]     : CAN DLC
+ *     frame[10.DLC]: CAN Payload
+ */
+#define CMD_SEND_DOWNSTREAM_PERIODIC    (0x12)  /* Send down to TWAI periodically */
 
 typedef void (*pfn_valid_frame_cb)(uint8_t * pFrame, uint32_t len);
 
